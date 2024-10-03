@@ -1,67 +1,74 @@
 #!/bin/bash
-# Catching incorrect params for recycle command
-if [[ $# -ne 2 ]];
+
+# Checking proper command usage
+if [[ $# -ne 3 ]]
 then
-	echo "Usage: ./recycle <Recycled_IP_Address>"
-	exit 1
+echo "usage: ./recycle <number of minutes to run container> <external IP address> <container name>"
+exit 1
 fi
-# Storing ip address of container that we are recycling
-old_ip=$1
-# Grab the name of the target container
-container_ip=$(sudo iptables -t nat -vL | grep 10.0.3.0/24 | cut -d'.' -f4- | cut -d' ' -f2- | sed 's/^ *//')
-current_container=$(sudo lxc-ls --fancy | grep $container_ip | cut -d' ' -f1)
-if [ ! -f "$honeypot_configs_file" ]
+
+
+# Storing container name to a variable
+CONTAINER_NAME=$3 
+# Storing external IP to a variable
+EXTERNAL_IP=$2
+# Gets container IP address
+CONTAINER_IP=$(sudo lxc-info -n $CONTAINER_NAME | grep "IP" | cut -d ' ' -f 14-)
+
+# Checking if utility file does NOT exist
+if [[ ! -e ./recycle_util_$CONTAINER_NAME ]]
 then
-    echo "ERROR: File "$honeypot_configs_file" not found."
-    exit 2
+    # Select random config from honeypot_configs
+    HP_CONFIG=$(shuf -n 1 ./honeypot_configs)
+
+    # Output redirect so that the first line of the utility file contains:
+    # number of minutes to run container, container name, and start time of container
+    echo "$1 $CONTAINER_NAME $(date +%s)" > ./recycle_util_$CONTAINER_NAME
+    echo "Container $CONTAINER_NAME started at $(date +%Y-%m-%dT%H:%M:%S%Z)"
+
+    # set up NAT rules
+    sudo ip addr add $EXTERNAL_IP/16 brd + dev eth0
+    sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination $EXTERNAL_IP --jump DNAT --to-destination $CONTAINER_IP
+    sudo iptables --table nat --insert POSTROUTING --source $CONTAINER_IP --destination 0.0.0.0/0 --jump SNAT --to-source $EXTERNAL_IP
+else # container is already up, does not need to be created
+    # Calculating a container’s uptime
+    CURRENT_TIME=$(date +%s)
+    START_TIME=$(cat ./recycle_util_$CONTAINER_NAME | cut -d ' ' -f3)
+    TIME_ELAPSED=$((CURRENT_TIME - START_TIME))
+    TARGET_DURATION=$(cat ./recycle_util_$CONTAINER_NAME | cut -d ' ' -f1)
+
+    # Checking to see if it is time to auto-recycle (auto-recycle every 15 minutes)
+    if [[ $TIME_ELAPSED -ge $(($TARGET_DURATION * 60)) ]]
+        then
+        # remove NAT rules & delete container
+        sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination $EXTERNAL_IP --jump DNAT --to-destination $CONTAINER_IP
+        sudo iptables --table nat --delete POSTROUTING --source $CONTAINER_IP --destination 0.0.0.0/0 --jump SNAT --to-source $EXTERNAL_IP
+        sudo ip addr delete $EXTERNAL_IP/16 brd + dev eth0
+
+        # ALSO MAKE SURE TO SAVE MITM/SNOOPY LOGS BEFORE DELETING, MIGHT GO HERE
+
+        # Stop and delete container
+        sudo lxc-stop -n "$CONTAINER_NAME"
+        sudo lxc-destroy -n "$CONTAINER_NAME"
+
+        # echo statement is purely for housekeeping
+        echo "Container $CONTAINER_NAME stopped at $(date +%Y-%m-%dT%H:%M:%S%Z)"
+
+        # delete utility file
+        rm ./recycle_util_$CONTAINER_NAME
+    else
+        # echo statement is purely for housekeeping
+        echo "Container $CONTAINER_NAME not ready to be recycled"
+    fi
 fi
-# Check if honeypot exists
-if sudo lxc-ls -1 | grep -q "^${current_container}$"
-then
-    # container ip variable
-    CONTAINER_IP=$(sudo lxc-info -n $CONTAINER_NAME | grep "IP" | cut -d ' ' -f 14-)
-    # delete NAT table rules from container
-    sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination REDACTED --jump DNAT --to-destination $CONTAINER_IP
-    sudo iptables --table nat --delete POSTROUTING --source $CONTAINER_IP --destination 0.0.0.0/0 --jump SNAT --to-source REDACTED
-    sudo ip addr delete REDACTED brd + dev eth0
-    # Stop and destroy the container if it exists
-    sudo lxc-stop -n "$current_container"
-    sudo lxc-destroy -n "$current_container"
-fi 
-# Select new container to be deployed (NOT THE SAME AS NEW CONTAINER BEING CREATED)
-# randomly choose a container from a pool of idling containers
-# Idling containers are stored in a file called ./honeypot_configs
-# Container names (also listed at the bottom of the document) are:
-# "little_med", "big_med", "little_fin", "big_fin", “little_tech”, “big_tech”, and “control”
-new_container=${shuf -n 1 ./honeypot_configs}
-# delete randomly selected container
-sed -i '/$new_container/d' ./honeypot_configs
-# add recently deleted container to the list
-echo $current_container >> ./honeypot_configs
-ip_of_honeypot=$1
-# Set up NAT rules for to-be deployed container
-# attacker -> $old_ip -> container's ip
-sudo lxc-start -n $new_container
-sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 -- destination "$ip_of_honeypot" --jump DNAT --to-destination "$new_container"
-sudo iptables --table nat --insert POSTROUTING --source "$new_container" --destination 0.0.0.0/0 --jump SNAT --to-source "$ip_of_honeypot"
-sudo ip addr add "$ip_of_honeypot"/16 brd + dev eth0
-sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination $ip_of_honeypot --protocol tcp --dport 22 --jump DNAT --to-destination "$mitm_ip":"$mitm_port"
-# Recreate container that we just deleted
-sudo lxc-create -n "$current_container" -t download -- -d ubuntu -r focal -a amd64
-sudo lxc-start -n "$current_container"
-# Install Snoopy Logger
-sudo lxc-attach -n "$current_container" -- sudo apt-get install wget -y
-sudo lxc-attach -n "$current_container" -- wget -O install-snoopy.sh https://github.com/a2o/snoopy/raw/install/install/install-snoopy.sh
-sudo lxc-attach -n "$current_container" -- chmod 755 install-snoopy.sh
-sudo lxc-attach -n "$current_container" -- sudo ./install-snoopy.sh stable
-sudo lxc-attach -n "$current_container" -- sudo rm -rf ./install-snoopy.* snoopy-*
-# Install MITM
-mitm_port=22
-mitm_ip= # REDACTED
-ip_of_honeypot=$1
-sudo lxc-create -n mitm_container -t download -- -d ubuntu -r focal -a amd64
-sudo lxc-start -n mitm_container
-sudo forever -l /var/lib/lxc/"$current_container"/rootfs/var/log/auth.log -a start /home/student/MITM/mitm.js -n "$current_container" -i $container_ip -p $mitm_port --auto-access --auto-access-fixed 2 --debug
-# Set up container with its honeypot configuration
-sudo lxc-attach -n "$current_container" -- bash -c "echo ./setup_$hp_config "$current_container""
+
+# set up MITM
+MITM_PORT=22
+sudo forever -l /var/lib/lxc/$CONTAINER_NAME/rootfs/var/log/auth.log -a
+start /home/student/MITM/mitm.js -n $CONTAINER_NAME -i $CONTAINER_IP -p$MITM_PORT --auto-access --auto-access-fixed 2 --debug
+sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --jump DNAT --to-destination "$CONTAINER_NAME"
+sudo iptables --table nat --insert POSTROUTING --source "$CONTAINER_IP" --destination 0.0.0.0/0 --jump SNAT --to-source "$EXTERNAL_IP"
+sudo ip addr add "$EXTERNAL_IP"/16 brd + dev "eth0"
+sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination "$EXTERNAL_IP":"$mitm_port"
+
 exit 0
