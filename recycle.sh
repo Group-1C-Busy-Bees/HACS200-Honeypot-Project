@@ -3,10 +3,10 @@
 # Checking proper command usage
 if [[ $# -ne 3 ]]
 then
-echo "usage: ./recycle <number of minutes to run container> <external IP address> <container name>"
+    echo "usage: ./recycle <number of minutes to run container> <external IP address> <container name>" 
+    echo "ERROR: incorrect params in $(pwd)/recycle.sh (1)" >> scripts.log
 exit 1
 fi
-
 
 # Storing container name to a variable
 CONTAINER_NAME=$3 
@@ -24,7 +24,7 @@ then
     # Output redirect so that the first line of the utility file contains:
     # number of minutes to run container, container name, and start time of container
     echo "$1 $CONTAINER_NAME $(date +%s)" > ./recycle_util_$CONTAINER_NAME
-    echo "Container $CONTAINER_NAME started at $(date +%Y-%m-%dT%H:%M:%S%Z)"
+    echo "STATUS: Container $CONTAINER_NAME started at $(date +%Y-%m-%dT%H:%M:%S%Z)" >> scripts.log
 
     # set up NAT rules
     sudo ip addr add $EXTERNAL_IP/16 brd + dev eth0
@@ -52,13 +52,14 @@ else # container is already up, does not need to be created
         sudo lxc-destroy -n "$CONTAINER_NAME"
 
         # echo statement is purely for housekeeping
-        echo "Container $CONTAINER_NAME stopped at $(date +%Y-%m-%dT%H:%M:%S%Z)"
+        echo "STATUS: Container $CONTAINER_NAME STOPPED at $(date +%Y-%m-%dT%H:%M:%S%Z)" >> scripts.log
 
         # delete utility file
         rm ./recycle_util_$CONTAINER_NAME
+        echo "STATUS: Container $CONTAINER_NAME RECYCLED at $(date +%Y-%m-%dT%H:%M:%S%Z)" >> scripts.log
     else
         # echo statement is purely for housekeeping
-        echo "Container $CONTAINER_NAME not ready to be recycled"
+        echo "STATUS: Container $CONTAINER_NAME not ready to be recycled" >> scripts.log
     fi
 fi
 
@@ -71,4 +72,5 @@ sudo iptables --table nat --insert POSTROUTING --source "$CONTAINER_IP" --destin
 sudo ip addr add "$EXTERNAL_IP"/16 brd + dev "eth0"
 sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination "$EXTERNAL_IP":"$mitm_port"
 
+echo "SUCCESS: $(pwd)/recycle.sh (0)" >> scripts.log
 exit 0
