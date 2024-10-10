@@ -5,7 +5,7 @@ if [[ $# -ne 3 ]]
 then
     echo "usage: ./recycle <number of minutes to run container> <external IP address> <container name>" 
     echo "ERROR: incorrect params in $(pwd)/recycle.sh (1)" >> scripts.log
-exit 1
+    exit 1
 fi
 
 # Storing container name to a variable
@@ -20,6 +20,8 @@ if [[ ! -e ./recycle_util_$CONTAINER_NAME ]]
 then
     # Select random config from honeypot_configs
     HP_CONFIG=$(shuf -n 1 ./honeypot_configs)
+    # runs selected config script
+    ./setup_"$HP_CONFIG"
 
     # Output redirect so that the first line of the utility file contains:
     # number of minutes to run container, container name, and start time of container
@@ -37,7 +39,7 @@ else # container is already up, does not need to be created
     TIME_ELAPSED=$((CURRENT_TIME - START_TIME))
     TARGET_DURATION=$(cat ./recycle_util_$CONTAINER_NAME | cut -d ' ' -f1)
 
-    # Checking to see if it is time to auto-recycle (auto-recycle every 15 minutes)
+    # Checking to see if it is time to recycle
     if [[ $TIME_ELAPSED -ge $(($TARGET_DURATION * 60)) ]]
         then
         # remove NAT rules & delete container
@@ -64,13 +66,14 @@ else # container is already up, does not need to be created
 fi
 
 # set up MITM
-MITM_PORT=22
+MITM_PORT=8080
 sudo forever -l /var/lib/lxc/$CONTAINER_NAME/rootfs/var/log/auth.log -a
-start /home/student/MITM/mitm.js -n $CONTAINER_NAME -i $CONTAINER_IP -p$MITM_PORT --auto-access --auto-access-fixed 2 --debug
+start /home/student/MITM/mitm.js -n $CONTAINER_NAME -i $CONTAINER_IP -p $MITM_PORT --auto-access --auto-access-fixed 2 --debug
 sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --jump DNAT --to-destination "$CONTAINER_NAME"
 sudo iptables --table nat --insert POSTROUTING --source "$CONTAINER_IP" --destination 0.0.0.0/0 --jump SNAT --to-source "$EXTERNAL_IP"
 sudo ip addr add "$EXTERNAL_IP"/16 brd + dev "eth0"
-sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination "$EXTERNAL_IP":"$mitm_port"
+# are these port numbers right? 
+sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport $MITM_PORT --jump DNAT --to-destination "$EXTERNAL_IP":"$MITM_PORT"
 
 echo "SUCCESS: $(pwd)/recycle.sh (0)" >> scripts.log
 exit 0
