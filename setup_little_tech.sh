@@ -2,8 +2,7 @@
 # Catching incorrect params for set up command
 if [[ $# -ne 1 ]];
 then
-	echo "Usage: ./setup_little_tech <Container Name>"
-	echo "ERROR: incorrect params in $(pwd)/setup_little_tech.sh (9)" >> scripts.log
+	echo "[$(date +'%Y-%m-%d %H:%M:%S')] CRITICAL ERROR: incorrect params in $(pwd)/setup_little_tech.sh (9)" >> scripts.log
 	exit 9
 fi
 
@@ -15,5 +14,5 @@ sudo lxc file push little_device_data.csv "$container_name"/root/Hardware/device
 
 sudo lxc file push little_userprefs.xls "$container_name"/root/Website/Resources/userprefs.xls
 sudo lxc file push little_login_customer.csv "$container_name"/root/Customer_Services/Assistance/login_customer.csv
-echo "SUCCESS: $(pwd)/setup_little_tech.sh (0)" >> scripts.log
+echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: $(pwd)/setup_little_tech.sh completed (0)" >> scripts.log
 exit 0
