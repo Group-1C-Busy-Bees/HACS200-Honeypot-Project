@@ -2,7 +2,7 @@
 # Catching incorrect params for set up command
 if [[ $# -ne 1 ]];
 then
- 	echo "ERROR: incorrect params in $(pwd)/setup_big_tech.sh (4)" >> scripts.log
+ 	echo "[$(date +'%Y-%m-%d %H:%M:%S')] CRITCAL ERROR: incorrect params in $(pwd)/setup_big_tech.sh (4)" >> scripts.log
 	exit 4
 fi
 
@@ -15,5 +15,5 @@ sudo lxc file push big_device_data.csv "$container_name"/root/Hardware/device_da
 sudo lxc file push big_userprefs.xls "$container_name"/root/Website/Resources/userprefs.xls
 sudo lxc file push big_login_customer.csv "$container_name"/root/Customer_Services/Assistance/login_customer.csv
 
-echo "SUCCESS: $(pwd)/setup_big_tech.sh (0)" >> scripts.log
+echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: $(pwd)/setup_big_tech.sh completed (0)" >> scripts.log
 exit 0
