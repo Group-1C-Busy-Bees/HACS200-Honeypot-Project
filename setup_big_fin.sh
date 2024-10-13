@@ -2,8 +2,7 @@
 # Catching incorrect params for set up command
 if [[ $# -ne 1 ]];
 then
-	echo "Usage: ./setup_big_fin <Container Name>"
- 	echo "ERROR: incorrect params in $(pwd)/setup_big_fin.sh (2)" >> scripts.log
+ 	echo "[$(date +'%Y-%m-%d %H:%M:%S')] CRITICAL ERROR: incorrect params in $(pwd)/setup_big_fin.sh (2)" >> scripts.log
 	exit 2
 fi
 
@@ -17,5 +16,5 @@ sudo lxc file push big_creditcard_info.csv "$container_name"/root/Services/Credi
 
 sudo lxc file push big_moneytransfer_hist.xls "$container_name"/root/Activity/Transfers/moneytransfer_hist.xls
 
-echo "SUCCESS: $(pwd)/setup_big_fin.sh (0)" >> scripts.log
+echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: $(pwd)/setup_big_fin.sh (0) complete" >> scripts.log
 exit 0
