@@ -65,15 +65,28 @@ else # container is already up, does not need to be created
     fi
 fi
 
-# set up MITM
-MITM_PORT=8080
-sudo forever -l /var/lib/lxc/$CONTAINER_NAME/rootfs/var/log/auth.log -a
-start /home/student/MITM/mitm.js -n $CONTAINER_NAME -i $CONTAINER_IP -p $MITM_PORT --auto-access --auto-access-fixed 2 --debug
-sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --jump DNAT --to-destination "$CONTAINER_NAME"
-sudo iptables --table nat --insert POSTROUTING --source "$CONTAINER_IP" --destination 0.0.0.0/0 --jump SNAT --to-source "$EXTERNAL_IP"
-sudo ip addr add "$EXTERNAL_IP"/16 brd + dev "eth0"
-# are these port numbers right? 
-sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport $MITM_PORT --jump DNAT --to-destination "$EXTERNAL_IP":"$MITM_PORT"
+
+# create new container
+if sudo lxc-ls | grep -q "$CONTAINER_NAME"; 
+then
+    echo “[URGENT] SEVERE ERROR IN RECYCLE SCRIPT (100)” >> scripts.log
+    exit 100
+else
+    sudo lxc-create -n “$CONTAINER_NAME” -t download -- -d ubuntu -r focal -a amd64
+    sudo lxc-start -n “$CONTAINER_NAME”
+    sudo systemctl restart lxc-net
+    sudo lxc-attach “$CONTAINER_NAME” -- apt install openssh-server -y
+fi
+
+# install MITM
+DAY=`date +%Y-%m-%d`
+sudo forever -l ~/attacker_logs/$DAY/$CONTAINER_NAME.logs/`date +%s` -a start ~/MITM/mitm.js -n $CONTAINER_NAME -i $CONTAINER_IP -p 32887 --auto-access --auto-access-fixed 4 --debug
+sudo sysctl -w net.ipv4.conf.all.route_localnet=1
+
+sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination $EXTERNAL_IP --jump DNAT --to-destination $CONTAINER_IP
+sudo iptables --table nat --insert POSTROUTING --source $CONTAINER_IP --destination 0.0.0.0/0 --jump SNAT --to-source $EXTERNAL_IP
+sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination $EXTERNAL_IP --protocol tcp --dport 22 --jump DNAT --to-destination 127.0.0.1:32887
+sudo ip addr add $EXTERNAL_IP/16 brd + dev eth0
 
 echo "SUCCESS: $(pwd)/recycle.sh (0)" >> scripts.log
 exit 0
