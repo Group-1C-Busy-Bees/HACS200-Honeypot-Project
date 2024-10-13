@@ -2,8 +2,7 @@
 # Catching incorrect params for set up command
 if [[ $# -ne 1 ]];
 then
-	echo "Usage: ./setup_little_med <Container Name>"
- 	echo "ERROR: incorrect params in $(pwd)/setup_little_med.sh (8)" >> scripts.log
+ 	echo "[$(date +'%Y-%m-%d %H:%M:%S')] CRITICAL ERROR: incorrect params in $(pwd)/setup_little_med.sh (8)" >> scripts.log
 	exit 8
 fi
 
@@ -17,5 +16,5 @@ sudo lxc file push little_hospital_hist.xls "$container_name"/root/General/Histo
 
 sudo lxc file push little_insurance.csv "$container_name"/root/Legal/Information/insurance.csv
 
-echo "SUCCESS: $(pwd)/setup_little_med.sh (0)" >> scripts.log
+echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: $(pwd)/setup_little_med.sh completed (0)" >> scripts.log
 exit 0
