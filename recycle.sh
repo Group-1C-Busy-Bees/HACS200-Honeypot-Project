@@ -80,15 +80,15 @@ else
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: "$CONTAINER_NAME" created in $(pwd)/recycle.sh" >> scripts.log
 fi
 
-# install MITM
+# start up MITM
 DAY=`date +%Y-%m-%d`
 sudo forever -l ~/attacker_logs/$DAY/"$CONTAINER_NAME".logs/`date +%s` -a start ~/MITM/mitm.js -n "$CONTAINER_NAME" -i "$CONTAINER_IP" -p 32887 --auto-access --auto-access-fixed 4 --debug
 sudo sysctl -w net.ipv4.conf.all.route_localnet=1
 
-sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --jump DNAT --to-destination "$CONTAINER_IP"
-sudo iptables --table nat --insert POSTROUTING --source "$CONTAINER_IP" --destination 0.0.0.0/0 --jump SNAT --to-source "$EXTERNAL_IP"
-sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination 127.0.0.1:32887
-sudo ip addr add "$EXTERNAL_IP"/16 brd + dev eth0
+# sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --jump DNAT --to-destination "$CONTAINER_IP"
+# sudo iptables --table nat --insert POSTROUTING --source "$CONTAINER_IP" --destination 0.0.0.0/0 --jump SNAT --to-source "$EXTERNAL_IP"
+# sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination 127.0.0.1:32887
+# sudo ip addr add "$EXTERNAL_IP"/16 brd + dev eth0
 echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: installed mitm on "$CONTAINER_NAME" in $(pwd)/recycle.sh" >> scripts.log
 echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: $(pwd)/recycle.sh completed (0)" >> scripts.log
 exit 0
