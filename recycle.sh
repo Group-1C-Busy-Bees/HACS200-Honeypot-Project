@@ -1,31 +1,36 @@
 #!/bin/bash
+# RECYCLE USAGE: ./recycle <container name> <external_ip> <minutes_to_run>
 
 # Checking proper command usage
 if [[ $# -ne 3 ]]
 then
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] CRITICAL ERROR: incorrect params in $(pwd)/recycle.sh (1)" >> scripts.log
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] CRITICAL ERROR: improper usage of $(pwd)/recycle.sh <container name> <external_ip> <minutes_to_run>(1)" >> scripts.log
     exit 1
 fi
 
 # Storing container name to a variable
-CONTAINER_NAME="$3"
+CONTAINER_NAME="$1"
 # Storing external IP to a variable
 EXTERNAL_IP="$2"
+# Storing container max duration to a variable
+MAX_DURATION_TIME="$3"
 # Gets container IP address
 CONTAINER_IP=$(sudo lxc-info -n "$CONTAINER_NAME" | grep "IP" | cut -d ' ' -f 14-)
+
 
 # Checking if utility file does NOT exist
 if [[ ! -e ./recycle_util_"$CONTAINER_NAME" ]]
 then
     # Select random config from honeypot_configs
     HP_CONFIG=$(shuf -n 1 ./honeypot_configs)
-    # runs selected config script
+    # runs selected config script which sets up container with randomly selected honeypot configuration
     ./setup_"$HP_CONFIG"
 
-    # Output redirect so that the first line of the utility file contains:
-    # number of minutes to run container, container name, and start time of container
-    echo "$1 "$CONTAINER_NAME" $(date +%s)" > ./recycle_util_"$CONTAINER_NAME"
+    # Output redirect so that the first line of the utility file contains: number of minutes to run container, container name, and start time of container
+    echo ""$MAX_DURATION_TIME" "$CONTAINER_NAME" $(date +%s)" > ./recycle_util_"$CONTAINER_NAME"
     echo "STATUS: "$CONTAINER_NAME" STARTED at $(date +%Y-%m-%dT%H:%M:%S%Z)" >> scripts.log
+
+    # for grace: ur stopping point
 
     # set up NAT rules
     sudo ip addr add "$EXTERNAL_IP"/16 brd + dev eth0
