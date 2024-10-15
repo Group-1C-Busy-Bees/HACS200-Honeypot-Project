@@ -1,5 +1,5 @@
 #!/bin/bash
-# RECYCLE USAGE: ./recycle <container name> <external_ip> <minutes_to_run>
+# RECYCLE USAGE: ./recycle <container name> <external_ip> <minutes_to_run> <idle_time>
 
 # Checking proper command usage
 if [[ $# -ne 3 ]]
@@ -14,9 +14,20 @@ CONTAINER_NAME="$1"
 EXTERNAL_IP="$2"
 # Storing container max duration to a variable
 MAX_DURATION_TIME="$3"
+# Storing current idle 
+IDLE_TIME="$4"
 # Gets container IP address
 CONTAINER_IP=$(sudo lxc-info -n "$CONTAINER_NAME" | grep "IP" | cut -d ' ' -f 14-)
 
+# if attacker has been in container for 10 minutes OR if attacker has been idle for 2 minutes
+    # manage logs
+    # remove NAT rules
+    # stop conatiner
+    # delete container
+    # create new container
+# if attacker still has time to do stuff
+    # return
+# no attacker has connected yet
 
 # Checking if utility file does NOT exist
 if [[ ! -e ./recycle_util_"$CONTAINER_NAME" ]]
