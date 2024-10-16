@@ -22,12 +22,15 @@ CONTAINER_IP=$(sudo lxc-info -n "$CONTAINER_NAME" | grep "IP" | cut -d ' ' -f 14
 # if attacker has been in container for 10 minutes OR if attacker has been idle for 2 minutes
     # manage logs
     # remove NAT rules
+    # set up NAT rules for by-standing container
+    # start by-standing container
     # stop conatiner
     # delete container
     # create new container
-# if attacker still has time to do stuff
-    # return
-# no attacker has connected yet
+    # randomly select honeypot config
+    # run selected honeypot config script
+#  else if attacker still has time to do stuff
+    # return 
 
 # Checking if utility file does NOT exist
 if [[ ! -e ./recycle_util_"$CONTAINER_NAME" ]]
