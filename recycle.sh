@@ -2,9 +2,9 @@
 # RECYCLE USAGE: ./recycle <container name> <external_ip> <minutes_to_run> <idle_time>
 
 # Checking proper command usage
-if [[ $# -ne 3 ]]
+if [[ $# -ne 4 ]]
 then
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] CRITICAL ERROR: improper usage of $(pwd)/recycle.sh <container name> <external_ip> <minutes_to_run>(1)" >> scripts.log
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] CRITICAL ERROR: improper usage of $(pwd)/recycle.sh <container name> <external_ip> <minutes_to_run> <idle time> (1)" >> scripts.log
     exit 1
 fi
 
@@ -41,7 +41,7 @@ then
     ./setup_"$HP_CONFIG"
 
     # Output redirect so that the first line of the utility file contains: number of minutes to run container, container name, and start time of container
-    echo ""$MAX_DURATION_TIME" "$CONTAINER_NAME" $(date +%s)" > ./recycle_util_"$CONTAINER_NAME"
+    echo ""$MAX_DURATION_TIME" "$IDLE_TIME" "$CONTAINER_NAME" $(date +%s)" > ./recycle_util_"$CONTAINER_NAME"
     echo "STATUS: "$CONTAINER_NAME" STARTED at $(date +%Y-%m-%dT%H:%M:%S%Z)" >> scripts.log
 
     # for grace: ur stopping point
