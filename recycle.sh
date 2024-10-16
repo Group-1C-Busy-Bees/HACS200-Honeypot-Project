@@ -40,9 +40,10 @@ while true; do
         # runs selected config script which sets up container with randomly selected honeypot configuration
         ./setup_"$HP_CONFIG"
     
-        # Output redirect so that the first line of the utility file contains: number of minutes to run container, container name, and start time of container
+        # Output redirect so that the first line of the utility file contains: number of minutes to run container, idle time, container name, and start time of container
         echo ""$MAX_DURATION_TIME" "$IDLE_TIME" "$CONTAINER_NAME" $(date +%s)" > ./recycle_util_"$CONTAINER_NAME"
-        echo "STATUS: "$CONTAINER_NAME" STARTED at $(date +%Y-%m-%dT%H:%M:%S%Z)" >> scripts.log
+        START_TIME=`date +%Y-%m-%dT%H:%M:%S%Z`
+        echo "STATUS: "$CONTAINER_NAME" STARTED at $START_TIME" >> scripts.log
     
         # for grace: ur stopping point
     
@@ -54,7 +55,7 @@ while true; do
     
         # start up MITM
         DAY=`date +%Y-%m-%d`
-        sudo forever -l ~/attacker_logs/$DAY/"$CONTAINER_NAME".logs/`date +%s` -a start ~/MITM/mitm.js -n "$CONTAINER_NAME" -i "$CONTAINER_IP" -p 32887 --auto-access --auto-access-fixed 4 --debug
+        sudo forever -l ~/attacker_logs/$HP_CONFIG/$START_TIME -a start ~/MITM/mitm.js -n "$CONTAINER_NAME" -i "$CONTAINER_IP" -p 32887 --auto-access --auto-access-fixed 4 --debug
         sudo sysctl -w net.ipv4.conf.all.route_localnet=1
     
         sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --jump DNAT --to-destination "$CONTAINER_IP"
@@ -65,7 +66,7 @@ while true; do
         echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: $(pwd)/recycle.sh completed (0)" >> scripts.log
     
         while true; do
-            LOGIN_TIME=`grep "Opened shell for attacker" ~/attacker_logs/$DAY/$CONTAINER_NAME.logs/$TIME_NAME | cut -c 1-19`
+            LOGIN_TIME=`grep "Opened shell for attacker" ~/attacker_logs/$HP_CONFIG/$START_TIME | cut -c 1-19`
             if [$LOGIN_TIME != ""]
             then 
                 LOGIN_EPOCH=`date -d "$LOGIN_TIME" +"%s"`
@@ -83,14 +84,13 @@ while true; do
             TARGET_DURATION=$(cat ./recycle_util_$CONTAINER_NAME | cut -d ' ' -f1)
         
             # Calculating idle time
-            DAY=`date +%Y-%m-%d`
-            START_TIME=$(cat ./recycle_util_$CONTAINER_NAME | cut -d ' ' -f4)
-            LAST_ACTION=`tail -n 1 ~/attacker_logs/$DAY/$CONTAINER_NAME.logs/$START_TIME | cut -c 1-19`
+            LOG_NAME=$(cat ./recycle_util_$CONTAINER_NAME | cut -d ' ' -f5) # fix this
+            LAST_ACTION=`tail -n 1 ~/attacker_logs/$HP_CONFIG/$START_TIME | cut -c 1-19`
             LAST_ACTION_EPOCH=`date -d "$LAST_ACTION" +"%s"`
             IDLE_TIME=$(cat ./recycle_util_$CONTAINER_NAME | cut -d ' ' -f2)
         
             # Check for logout
-            LOGOUT=`grep "Honeypot ended shell" LOG_NAME | wc -l`
+            LOGOUT=`grep "Honeypot ended shell" ~/attacker_logs/$HP_CONFIG/$START_TIME | wc -l`
             
             # Checking to see if it is time to recycle
             if [[ $LOGOUT -eq 1 || $(($CURRENT_TIME - $(($LAST_ACTION * 60)) )) -ge $IDLE_TIME || $TIME_ELAPSED -ge $(($TARGET_DURATION * 60)) ]]
