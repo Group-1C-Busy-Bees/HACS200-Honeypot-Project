@@ -117,7 +117,8 @@ else # container is already up, does not need to be created
             rm ./recycle_util_"$CONTAINER_NAME"
             
             # manage logs (should be a script call)
-
+            ./grab_logs $CONTAINER_NAME
+            
             # copy new randomly selected honeypot config
             sudo lxc-copy -n "$HP_CONFIG" -N "$CONTAINER_NAME"
             # start up container 
@@ -128,9 +129,6 @@ else # container is already up, does not need to be created
             sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --jump DNAT --to-destination "$CONTAINER_IP"
             sudo iptables --table nat --insert POSTROUTING --source "$CONTAINER_IP" --destination 0.0.0.0/0 --jump SNAT --to-source "$EXTERNAL_IP"
             echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: nat rules set for "$CONTAINER_NAME"" >> scripts.log
-            
-            # start mitm logs?       
-
             
             break # stop checking; container has been recycled
         fi
