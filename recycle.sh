@@ -47,7 +47,7 @@ then
     # Output redirect so that the first line of the utility file contains: number of minutes to run container, idle time, container name, and start time of container
     echo ""$MAX_DURATION_TIME" "$IDLE_TIME" "$HP_CONFIG" $(date +%s)" > ./recycle_util_"$CONTAINER_NAME"
     START_TIME=`date +%Y-%m-%dT%H:%M:%S%Z`
-    echo " $START_TIME" >> scripts.log
+    echo "STATUS: "$CONTAINER_NAME" STARTED at $START_TIME" >> scripts.log
 
     # set up NAT rules
     sudo ip addr add "$EXTERNAL_IP"/16 brd + dev eth0
