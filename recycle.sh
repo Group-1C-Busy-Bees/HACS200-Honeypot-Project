@@ -19,11 +19,11 @@ IDLE_TIME="$4"
 # Gets container IP address
 CONTAINER_IP=$(sudo lxc-info -n "$CONTAINER_NAME" | grep "IP" | cut -d ' ' -f 14-)
 
-# if attacker has been in container for 10 minutes OR if attacker has been idle for 2 minutes
+# if attacker has been in container for 10 minutes OR if attacker has been idle for 2 minutes OR if attacker has logged out
     # manage logs
     # remove NAT rules
-    # set up NAT rules for by-standing container
     # start by-standing container
+    # set up NAT rules for by-standing container
     # stop conatiner
     # delete container
     # create new container
@@ -31,8 +31,9 @@ CONTAINER_IP=$(sudo lxc-info -n "$CONTAINER_NAME" | grep "IP" | cut -d ' ' -f 14
     # run selected honeypot config script
 #  else if attacker still has time to do stuff
     # return 
+    
 while true; do
-    # Checking if utility file does NOT exist
+    # Checking if utility file does NOT exist aka no container exists (technically should never run?)
     if [[ ! -e ./recycle_util_"$CONTAINER_NAME" ]]
     then
         # Select random config from honeypot_configs
@@ -44,8 +45,6 @@ while true; do
         echo ""$MAX_DURATION_TIME" "$IDLE_TIME" "$CONTAINER_NAME" $(date +%s)" > ./recycle_util_"$CONTAINER_NAME"
         START_TIME=`date +%Y-%m-%dT%H:%M:%S%Z`
         echo "STATUS: "$CONTAINER_NAME" STARTED at $START_TIME" >> scripts.log
-    
-        # for grace: ur stopping point
     
         # set up NAT rules
         sudo ip addr add "$EXTERNAL_IP"/16 brd + dev eth0
@@ -85,25 +84,33 @@ while true; do
         
             # Calculating idle time
             LOG_NAME=$(cat ./recycle_util_$CONTAINER_NAME | cut -d ' ' -f5) # fix this
-            LAST_ACTION=`tail -n 1 ~/attacker_logs/$HP_CONFIG/$START_TIME | cut -c 1-19`
-            LAST_ACTION_EPOCH=`date -d "$LAST_ACTION" +"%s"`
+            LAST_ACTION=$(tail -n 1 ~/attacker_logs/$HP_CONFIG/$START_TIME | cut -c 1-19) # should these be backticks or $()? -grace 10/16
+            LAST_ACTION_EPOCH=$(date -d "$LAST_ACTION" +"%s")
             IDLE_TIME=$(cat ./recycle_util_$CONTAINER_NAME | cut -d ' ' -f2)
         
             # Check for logout
-            LOGOUT=`grep "Honeypot ended shell" ~/attacker_logs/$HP_CONFIG/$START_TIME | wc -l`
+            LOGOUT=$(grep "Honeypot ended shell" ~/attacker_logs/$HP_CONFIG/$START_TIME | wc -l)
             
             # Checking to see if it is time to recycle
             if [[ $LOGOUT -eq 1 || $(($CURRENT_TIME - $(($LAST_ACTION * 60)) )) -ge $IDLE_TIME || $TIME_ELAPSED -ge $(($TARGET_DURATION * 60)) ]]
                 then
-                # remove NAT rules & delete container
+                # remove NAT rules
                 sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --jump DNAT --to-destination "$CONTAINER_IP"
                 sudo iptables --table nat --delete POSTROUTING --source "$CONTAINER_IP" --destination 0.0.0.0/0 --jump SNAT --to-source "$EXTERNAL_IP"
                 sudo ip addr delete "$EXTERNAL_IP"/16 brd + dev eth0
-        
+
+                # housekeeping echo statement
                 echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: nat rules removed for "$CONTAINER_NAME"" >> scripts.log
-                # ALSO MAKE SURE TO SAVE MITM/SNOOPY LOGS BEFORE DELETING, MIGHT GO HERE
+
+                # manage logs (should be a script call)
+
+                # start stand-up container
+                
+                # set-up a stand-by container's NAT rules
+
+                # start mitm logs?
         
-                # Stop and delete container
+                # Stop and delete old container
                 sudo lxc-stop -n "$CONTAINER_NAME"
                 sudo lxc-destroy -n "$CONTAINER_NAME"
         
