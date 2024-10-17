@@ -52,7 +52,7 @@ while true; do
         sudo iptables --table nat --insert POSTROUTING --source "$CONTAINER_IP" --destination 0.0.0.0/0 --jump SNAT --to-source "$EXTERNAL_IP"
         echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: nat rules set for "$CONTAINER_NAME"" >> scripts.log
     
-        # start up MITM
+        # set-up MITM
         DAY=`date +%Y-%m-%d`
         sudo forever -l ~/attacker_logs/$HP_CONFIG/$START_TIME -a start ~/MITM/mitm.js -n "$CONTAINER_NAME" -i "$CONTAINER_IP" -p 32887 --auto-access --auto-access-fixed 4 --debug
         sudo sysctl -w net.ipv4.conf.all.route_localnet=1
@@ -61,7 +61,7 @@ while true; do
         sudo iptables --table nat --insert POSTROUTING --source "$CONTAINER_IP" --destination 0.0.0.0/0 --jump SNAT --to-source "$EXTERNAL_IP"
         sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination 127.0.0.1:32887
         sudo ip addr add "$EXTERNAL_IP"/16 brd + dev eth0
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: installed mitm on "$CONTAINER_NAME" in $(pwd)/recycle.sh" >> scripts.log
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: set-up mitm on "$CONTAINER_NAME" in $(pwd)/recycle.sh" >> scripts.log
         echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: $(pwd)/recycle.sh completed (0)" >> scripts.log
     
         while true; do
@@ -93,7 +93,7 @@ while true; do
             
             # Checking to see if it is time to recycle
             if [[ $LOGOUT -eq 1 || $(($CURRENT_TIME - $(($LAST_ACTION * 60)) )) -ge $IDLE_TIME || $TIME_ELAPSED -ge $(($TARGET_DURATION * 60)) ]]
-                then
+                then # if it is time to recycle
                 # remove NAT rules
                 sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --jump DNAT --to-destination "$CONTAINER_IP"
                 sudo iptables --table nat --delete POSTROUTING --source "$CONTAINER_IP" --destination 0.0.0.0/0 --jump SNAT --to-source "$EXTERNAL_IP"
@@ -102,36 +102,50 @@ while true; do
                 # housekeeping echo statement
                 echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: nat rules removed for "$CONTAINER_NAME"" >> scripts.log
 
-                # manage logs (should be a script call)
-
-                # start stand-up container
-                
-                # set-up a stand-by container's NAT rules
-
-                # start mitm logs?
-        
-                # Stop and delete old container
+                # Stop old container
                 sudo lxc-stop -n "$CONTAINER_NAME"
-                sudo lxc-destroy -n "$CONTAINER_NAME"
-        
-                # echo statement is purely for housekeeping
+                                
+                # echo statement is for housekeeping
                 echo "[$(date +'%Y-%m-%d %H:%M:%S')] STATUS: "$CONTAINER_NAME" STOPPED at $(date +%Y-%m-%dT%H:%M:%S%Z)" >> scripts.log
-        
+
                 # delete utility file
                 rm ./recycle_util_"$CONTAINER_NAME"
-                echo "[$(date +'%Y-%m-%d %H:%M:%S')] STATUS: "$CONTAINER_NAME" RECYCLED at $(date +%Y-%m-%dT%H:%M:%S%Z)" >> scripts.log
+                
+                # manage logs (should be a script call)
+
+                # set up stand-by and old containers for recycling
+                STANDBY_CONTAINER="${CONTAINER_NAME}_SB"
+                DEL_CONTAINER="${CONTAINER_NAME}_DEL"
+                sudo lxc move "$CONTAINER_NAME" "$DEL_CONTAINER" # need to test if this works
+                sudo lxc move "$STANDBY_CONTAINER" "$CONTAINER_NAME" # need to test if this works
+                
+                # start stand-by container
+                sudo lxc-start -n "$CONTAINER_NAME"
+                
+                # set-up stand-by container's NAT rules
+                sudo ip addr add "$EXTERNAL_IP"/16 brd + dev eth0
+                sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --jump DNAT --to-destination "$CONTAINER_IP"
+                sudo iptables --table nat --insert POSTROUTING --source "$CONTAINER_IP" --destination 0.0.0.0/0 --jump SNAT --to-source "$EXTERNAL_IP"
+                echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: nat rules set for "$CONTAINER_NAME"" >> scripts.log
+                
+                # start mitm logs?
+        
+                # Delete old container
+                sudo lxc-destroy -n "$DEL_CONTAINER"
+                echo "[$(date +'%Y-%m-%d %H:%M:%S')] STATUS: "$CONTAINER_NAME" RECYCLED at $(date +%Y-%m-%dT%H:%M:%S%Z)" >> scripts.log          
                 
                 # create new container to replace one that we recently deleted
-                if sudo lxc-ls | grep -q "$CONTAINER_NAME"; 
+                if sudo lxc-ls | grep -q "$STANDBY_CONTAINER"; 
                 then
-                    echo "[$(date +'%Y-%m-%d %H:%M:%S')] CRITICAL ERROR: "$CONTAINER_NAME" may not have been properly handled in $(pwd)/recycle.sh (100)" >> scripts.log
+                    echo "[$(date +'%Y-%m-%d %H:%M:%S')] CRITICAL ERROR: "$STANDBY_CONTAINER" may not have been properly handled in $(pwd)/recycle.sh (100)" >> scripts.log
                     exit 100
                 else
-                    sudo lxc-create -n “"$CONTAINER_NAME"” -t download -- -d ubuntu -r focal -a amd64
-                    sudo lxc-start -n “"$CONTAINER_NAME"”
-                    sudo systemctl restart lxc-net
-                    sudo lxc-attach “"$CONTAINER_NAME"” -- apt install openssh-server -y
-                    echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: "$CONTAINER_NAME" created in $(pwd)/recycle.sh" >> scripts.log
+                    sudo lxc-create -n "$STANDBY_CONTAINER" -t download -- -d ubuntu -r focal -a amd64
+                    sudo lxc-start -n "$STANDBY_CONTAINER"
+                    sudo systemctl restart lxc-net # do we still need this?
+                    sudo lxc-attach "$STANDBY_CONTAINER" -- apt install openssh-server -y
+                    sudo lxc-stop -n "$STANDBY_CONTAINER" # new stand-by container should be idle when created
+                    echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: "$STANDBY_CONTAINER" created in $(pwd)/recycle.sh" >> scripts.log
                 fi
                 break # stop checking; container has been recycled
             fi
