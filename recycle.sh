@@ -18,6 +18,8 @@ MAX_DURATION_TIME="$3"
 IDLE_TIME="$4"
 # Gets container IP address
 CONTAINER_IP=$(sudo lxc-info -n "$CONTAINER_NAME" | grep "IP" | cut -d ' ' -f 14-)
+# Gets login file line count
+$LINE_COUNT=$((wc -l ~/MITM/logs/logins/$CONTAINER_NAME.log))
 
 # if attacker has been in container for 10 minutes OR if attacker has been idle for 2 minutes OR if attacker has logged out
     # manage logs
@@ -34,7 +36,8 @@ CONTAINER_IP=$(sudo lxc-info -n "$CONTAINER_NAME" | grep "IP" | cut -d ' ' -f 14
     
 
 # Checking if utility file does NOT exist aka no container exists (technically should never run?)
-if [[ ! -e ./recycle_util_"$CONTAINER_NAME" ]]
+# TODO: CHANGE THIS TO WORK OFF OF LOGINS, CHANGE OTHER LOGIC ACCORDINGLY
+if [[ $LINE_COUNT -ge 1 ]]
 then
     # Select random config from honeypot_configs
     HP_CONFIG=$(shuf -n 1 ./honeypot_configs)
@@ -64,7 +67,7 @@ then
 
     while true; do
         LOGIN_TIME=`grep "Opened shell for attacker" ~/attacker_logs/debug_logs/$HP_CONFIG/$START_TIME | cut -c 1-19`
-        if [ $LOGIN_TIME != ""]
+        if [ $LOGIN_TIME != "" ]
         then 
             LOGIN_EPOCH=`date -d "$LOGIN_TIME" +"%s"`
             echo " $LOGIN_EPOCH" >> ./recycle_util_$CONTAINER_NAME
@@ -90,7 +93,7 @@ else # container is already up, does not need to be created
         LOGOUT=$(grep "Honeypot ended shell" ~/attacker_logs/$HP_CONFIG/$START_TIME | wc -l)
         
         # Checking to see if it is time to recycle
-        if [[ $LOGOUT -eq 1 || $(($CURRENT_TIME - $(($LAST_ACTION * 60)) )) -ge $IDLE_TIME || $TIME_ELAPSED -ge $(($TARGET_DURATION * 60)) ]]
+        if [[ $LOGOUT -eq 1 || $(($CURRENT_TIME - $LAST_ACTION_EPOCH)) -ge $(($IDLE_TIME * 60)) || $TIME_ELAPSED -ge $(($TARGET_DURATION * 60)) ]]
             then # if it is time to recycle
             # remove NAT rules
             sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --jump DNAT --to-destination "$CONTAINER_IP"
