@@ -8,13 +8,13 @@ fi
 
 container_name=$1
 
-sudo lxc-attach -n "$container_name" -- bash -c "mkdir Customer_Service Services Activity | cd Customer_Service | mkdir Resources | cd ../Services | mkdir Credit_Card Retirement | cd ../Activity | mkdir Transfers"
+sudo lxc-attach -n "$container_name" -- bash -c "mkdir Customer_Service Services Activity; cd Customer_Service; mkdir Resources; cd ../Services; mkdir Credit_Card Retirement; cd ../Activity; mkdir Transfers"
 
-sudo lxc file push little_bankacc_customer.csv "$container_name"/root/Customer_Service/bankacc_customer.csv
+cp little_bankacc_customer.csv /var/lib/lxc/"$CONTAINER_NAME"/rootfs/home/Customer_Service/bankacc_customer.csv
 
-sudo lxc file push little_creditcard_info.csv "$container_name"/root/Services/Credit_Card/creditcard_info.csv 
+cp little_creditcard_info.csv /var/lib/lxc/"$CONTAINER_NAME"/rootfs/home/Services/Credit_Card/creditcard_info.csv 
 
-sudo lxc file push little_moneytransfer_hist.xls "$container_name"/root/Activity/Transfers/moneytransfer_hist.xls
+cp little_moneytransfer_hist.xls /var/lib/lxc/"$CONTAINER_NAME"/rootfs/home/Activity/Transfers/moneytransfer_hist.xls
 
 echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: $(pwd)/setup_little_fin.sh completed (0)" >> scripts.log
 exit 0
