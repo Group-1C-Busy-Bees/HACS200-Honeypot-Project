@@ -64,7 +64,7 @@ then
 
     while true; do
         LOGIN_TIME=`grep "Opened shell for attacker" ~/attacker_logs/debug_logs/$HP_CONFIG/$START_TIME | cut -c 1-19`
-        if [$LOGIN_TIME != ""]
+        if [ $LOGIN_TIME != ""]
         then 
             LOGIN_EPOCH=`date -d "$LOGIN_TIME" +"%s"`
             echo " $LOGIN_EPOCH" >> ./recycle_util_$CONTAINER_NAME
@@ -141,7 +141,7 @@ else # container is already up, does not need to be created
                 sudo lxc-create -n "$STANDBY_CONTAINER" -t download -- -d ubuntu -r focal -a amd64
                 sudo lxc-start -n "$STANDBY_CONTAINER"
                 sudo systemctl restart lxc-net # do we still need this?
-                sudo lxc-attach "$STANDBY_CONTAINER" -- apt install openssh-server -y
+                sudo lxc-attach -n "$STANDBY_CONTAINER" -- apt install openssh-server -y
                 sudo lxc-stop -n "$STANDBY_CONTAINER" # new stand-by container should be idle when created
                 echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: "$STANDBY_CONTAINER" created in $(pwd)/recycle.sh" >> scripts.log
             fi
