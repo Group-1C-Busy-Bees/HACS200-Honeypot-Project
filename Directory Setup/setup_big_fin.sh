@@ -17,5 +17,5 @@ cp big_creditcard_info.csv /var/lib/lxc/"$CONTAINER_NAME"/rootfs/home/creditcard
 
 cp big_moneytransfer_hist.xls /var/lib/lxc/"$CONTAINER_NAME"/rootfs/home/moneytransfer_hist.xls
 
-echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: $(pwd)/setup_big_fin.sh (0) complete" >> scripts.log
+echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: $(pwd)/setup_big_fin.sh complete (0)" >> scripts.log
 exit 0
