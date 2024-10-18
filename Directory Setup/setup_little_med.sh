@@ -8,7 +8,7 @@ fi
 
 container_name=$1
 
-sudo lxc-attach -n "$container_name" -- bash -c "mkdir Patients General Legal; cd Patients; mkdir Data; cd ../General; mkdir Historical; cd ../Public; mkdir Information Documents"
+sudo lxc-attach -n "$container_name" -- bash -c "mkdir Patients General Public; cd Patients; mkdir Data; cd ../General; mkdir Historical; cd ../Public; mkdir Information Documents"
 
 cp little_patient_files.csv /var/lib/lxc/"$CONTAINER_NAME"/rootfs/home/Patients/Data/patient_files.csv
 
