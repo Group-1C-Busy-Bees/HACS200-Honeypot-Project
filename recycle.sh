@@ -9,35 +9,15 @@ then
 fi
 
 # STORING PARAMETERS AS VARS
-# Storing container name to a variable
-CONTAINER_NAME="$1"
-# Storing external IP to a variable
-EXTERNAL_IP="$2"
-# Storing container max duration to a variable
-MAX_DURATION_TIME="$3"
-# Storing current idle 
-IDLE_TIME="$4"
+CONTAINER_NAME="$1" # container name
+EXTERNAL_IP="$2" # external ip
+MAX_DURATION_TIME="$3" # max amount of time an attacker has in a honeypot
+IDLE_TIME="$4" # attacker's current idle time
 
 # INITIALIZING NEW GLOBAL VARIABLES 
-# Gets container IP address
-CONTAINER_IP=$(sudo lxc-info -n "$CONTAINER_NAME" | grep "IP" | cut -d ' ' -f 14-)
-# Gets login file line count
-$LINE_COUNT=$((wc -l ~/MITM/logs/logins/$CONTAINER_NAME.log))
-# Select random config from honeypot_configs
-HP_CONFIG=$(shuf -n 1 ./honeypot_configs)
-
-# if attacker has been in container for 10 minutes OR if attacker has been idle for 2 minutes OR if attacker has logged out
-    # manage logs
-    # remove NAT rules
-    # start by-standing container
-    # set up NAT rules for by-standing container
-    # stop conatiner
-    # delete container
-    # create new container
-    # randomly select honeypot config
-    # run selected honeypot config script
-#  else if attacker still has time to do stuff
-    # return 
+CONTAINER_IP=$(sudo lxc-info -n "$CONTAINER_NAME" | grep "IP" | cut -d ' ' -f 14-) # grabs and stores container ip
+LINE_COUNT=$((wc -l ~/MITM/logs/logins/$CONTAINER_NAME.log)) # grabs and stores log-in file line count
+HP_CONFIG=$(shuf -n 1 ./honeypot_configs) # randomly selects a honeypot config
 
 # TODO: CHANGE THIS TO WORK OFF OF LOGINS, CHANGE OTHER LOGIC ACCORDINGLY
 if [[ $LINE_COUNT -ge 1 ]]
@@ -72,7 +52,8 @@ then
         fi
     done
 
-else # container is already up, does not need to be created
+else # TODO: FIX LOGIC
+# container is already up, does not need to be created
     while true; do # check if container needs to be recycled until it does need to be recyled
         # Calculating how long attacker has been inside
         CURRENT_TIME=$(date +%s)
