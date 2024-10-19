@@ -55,7 +55,7 @@ then
 
     # set-up MITM
     DAY=`date +%Y-%m-%d`
-    sudo forever -l ~/attacker_logs/debug_logs/$HP_CONFIG/$START_TIME -a start ~/MITM/mitm.js -n "$CONTAINER_NAME" -i "$CONTAINER_IP" -p 32887 --auto-access --auto-access-fixed 4 --debug
+    sudo forever -l ~/attacker_logs/debug_logs/$HP_CONFIG/$START_TIME -a start ~/MITM/mitm.js -n "$CONTAINER_NAME" -i "$CONTAINER_IP" -p 32887 --auto-access --auto-access-fixed 2 --debug
     sudo sysctl -w net.ipv4.conf.all.route_localnet=1
 
     sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination 127.0.0.1:32887
