@@ -38,15 +38,10 @@ HP_CONFIG=$(shuf -n 1 ./honeypot_configs)
     # run selected honeypot config script
 #  else if attacker still has time to do stuff
     # return 
-    
 
-# Checking if utility file does NOT exist aka no container exists (technically should never run?)
 # TODO: CHANGE THIS TO WORK OFF OF LOGINS, CHANGE OTHER LOGIC ACCORDINGLY
 if [[ $LINE_COUNT -ge 1 ]]
 then
-    # runs selected config script which sets up container with randomly selected honeypot configuration
-    ./setup_"$HP_CONFIG"
-
     # Output redirect so that the first line of the utility file contains: number of minutes to run container, idle time, container name, and start time of container
     echo ""$MAX_DURATION_TIME" "$IDLE_TIME" "$HP_CONFIG" $(date +%s)" > ./recycle_util_"$CONTAINER_NAME"
     START_TIME=`date +%Y-%m-%dT%H:%M:%S%Z`
