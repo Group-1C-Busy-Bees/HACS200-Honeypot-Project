@@ -1,0 +1,23 @@
+#!/bin/bash
+# Catching incorrect params for set up command
+if [[ $# -ne 1 ]];
+then
+ 	echo "[$(date +'%Y-%m-%d %H:%M:%S')] CRITICAL ERROR: incorrect params in $(pwd)/setup_big_fin.sh (2)" >> scripts.log
+	exit 2
+fi
+
+CONTAINER_NAME="$1"
+
+sudo lxc-attach -n "$CONTAINER_NAME" -- bash -c "mkdir Customer_Service Services Activity ; cd Customer_Service ; mkdir Resources ; cd ../Services ; mkdir Credit_Card Retirement ; cd ../Activity ; mkdir Transfers"
+
+sleep 2
+
+# THE FOLLOWING COMMANDS NEED SUPERUSER (SU) PERMS 
+cp /home/student/test/draft_honey/big_bankacc_customer.csv /var/lib/lxc/"$CONTAINER_NAME"/rootfs/root/Customer_Service/Resources/bankacc_customer.csv
+
+cp /home/student/test/draft_honey/big_creditcard_info.csv /var/lib/lxc/"$CONTAINER_NAME"/rootfs/root/Services/Credit_Card/creditcard_info.csv
+
+cp /home/student/test/draft_honey/big_moneytransfer_hist.xls /var/lib/lxc/"$CONTAINER_NAME"/rootfs/root/Activity/Transfers/moneytransfer_hist.xls
+
+echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: $(pwd)/setup_big_fin.sh (0) complete" >> scripts.log
+exit 0
