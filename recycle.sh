@@ -12,30 +12,30 @@ MAX_DURATION=600 # max amount of time an attacker has in a honeypot (seconds)
 MAX_IDLE_TIME=120 # attacker's maximum idle time (seconds)
 
 # the util file only has hp config, does not have login time recorded and therefore no attacker
-if [[ $(wc -l ./recycle_util_"$CONTAINER_NAME”) -eq 1 ]]
+if [[ $(wc -l ./recycle_util_"$CONTAINER_NAME") -eq 1 ]]
 then
   if [[ $(wc -l ~/MITM/logs/logins/"$CONTAINER_NAME".log) -lt 1 ]]
   then 
     exit 2 # still no attacker
   else
-    LOG_PRE=$(cat ~/MITM/logs/logins/”$CONTAINER_NAME”.log | cut -d';' -f1 | cut -d' ' -f2)
+    LOG_PRE=$(cat ~/MITM/logs/logins/"$CONTAINER_NAME".log | cut -d';' -f1 | cut -d' ' -f2)
     # Login time in epoch for easy math
     LOGIN_EPOCH=$(date -d "$LOG_PRE" +"%s")
     LOGIN_TIME=$(cat ~/MITM/logs/logins/"$CONTAINER_NAME".log | cut -d';' -f3)
     # put login time, also the name of MITM logs, into util file
-    echo “login:“$LOGIN_TIME”” >> ./recycle_util_"$CONTAINER_NAME" 
+    echo "login:"$LOGIN_TIME"" >> ./recycle_util_"$CONTAINER_NAME" 
     # convert to epoch time and also stick in util file for later calculations of time elapsed, etc
-    echo “epoch:“$LOGIN_EPOCH”” >> ./recycle_util_"$CONTAINER_NAME"
+    echo "epoch:"$LOGIN_EPOCH"" >> ./recycle_util_"$CONTAINER_NAME"
   fi
 else
   # check the current time, see if container needs to be recycled.
   # Calculating how long attacker has been inside container
   CURRENT_TIME=$(date +%s)
-  LOGIN_EPOCH=$(grep “epoch” ./recycle_util_$CONTAINER_NAME | cut -d ':' -f2)
+  LOGIN_EPOCH=$(grep "epoch" ./recycle_util_$CONTAINER_NAME | cut -d ':' -f2)
   TIME_ELAPSED=$(($CURRENT_TIME - $LOGIN_EPOCH))
 
   # Calculating idle time
-  LOG_NAME=$(grep “login” ./recycle_util_$CONTAINER_NAME | cut -d ' ' -f2)
+  LOG_NAME=$(grep "login" ./recycle_util_$CONTAINER_NAME | cut -d ' ' -f2)
   LAST_ACTION=$(tail -n 1 ~/attacker_logs/debug_logs/$HP_CONFIG/$START_TIME | cut -c 1-19)
   LAST_ACTION_EPOCH=$(date -d "$LAST_ACTION" +"%s")
 
@@ -44,7 +44,7 @@ else
 
 
   # if container should be recycled
-  if [[ “$LOGOUT” -eq 1 || $(($CURRENT_TIME - $LAST_ACTION_EPOCH)) -ge $MAX_IDLE_TIME || "$TIME_ELAPSED" -ge $MAX_DURATION ]]
+  if [[ "$LOGOUT" -eq 1 || $(($CURRENT_TIME - $LAST_ACTION_EPOCH)) -ge $MAX_IDLE_TIME || "$TIME_ELAPSED" -ge $MAX_DURATION ]]
     then
     # if yes, recycle
     # remove NAT rules for MITM
