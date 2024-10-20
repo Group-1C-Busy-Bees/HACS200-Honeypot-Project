@@ -33,14 +33,12 @@ MAX_IDLE_TIME=120 # attacker's maximum idle time (in seconds)
 
 # checking what contents are in util file
 if [[ $(wc -l ./recycle_util_"$CONTAINER_NAME") -eq 1 ]]
-then # IF ONLY HP CONFIG IS IN UTIL FILE...
-    # less than 1 line in login log indicates that no attacker has entered the honeypot yet
+then
     if [[ $(wc -l ~/MITM/logs/logins/"$CONTAINER_NAME".log) -lt 1 ]]
     then 
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')] STATUS: no attacker detected in "$CONTAINER_NAME"" >> scripts.log
         exit 2 # still no attacker
-    else # if 
-        LOG_PRE=$(cat ~/MITM/logs/logins/"$CONTAINER_NAME".log | cut -d';' -f1 | cut -d' ' -f2)
+    else
+        LOG_PRE=$(cat ~/MITM/logs/logins/”$CONTAINER_NAME”.log | cut -d';' -f1 | cut -d' ' -f2)
         # Login time in epoch for easy math
         LOGIN_EPOCH=$(date -d "$LOG_PRE" +"%s")
         LOGIN_TIME=$(cat ~/MITM/logs/logins/"$CONTAINER_NAME".log | cut -d';' -f3)
@@ -49,32 +47,34 @@ then # IF ONLY HP CONFIG IS IN UTIL FILE...
         # convert to epoch time and also stick in util file for later calculations of time elapsed, etc
         echo "epoch:"$LOGIN_EPOCH"" >> ./recycle_util_"$CONTAINER_NAME"
     fi
-else # IF HP CONFIG AND LOGIN TIME ARE IN UTIL FILE...
-    # Calculate how long attacker has been inside container
+else
+    # check the current time, see if container needs to be recycled.
+    # Calculating how long attacker has been inside container
     CURRENT_TIME=$(date +%s)
-    LOGIN_EPOCH=$(grep "epoch" ./recycle_util_$CONTAINER_NAME | cut -d ':' -f2)
+    LOGIN_EPOCH=$(grep “epoch” ./recycle_util_$CONTAINER_NAME | cut -d ':' -f2)
+    LOGIN_TIME=$(grep “login” ./recycle_util_$CONTAINER_NAME | cut -d ':' -f2)
     TIME_ELAPSED=$(($CURRENT_TIME - $LOGIN_EPOCH))
     
-    # Calculate idle time
-    LOG_NAME=$(grep "login" ./recycle_util_$CONTAINER_NAME | cut -d ' ' -f2)
-    LAST_ACTION=$(tail -n 1 ~/attacker_logs/debug_logs/$HP_CONFIG/$START_TIME | cut -c 1-19)
-    LAST_ACTION_EPOCH=$(date -d "$LAST_ACTION" +"%s")
+    # Calculating idle time
+    ID_PRE=$(tail -n 1 ~/MITM/logs/keystrokes/"$LOGIN_TIME".log | cut -d ' ' -f2)
+    LAST_ACTION_EPOCH=$(date -d "$ID_PRE" +"%s")
     
     # Check for logout
-    LOGOUT=$(grep "Honeypot ended shell" ~/attacker_logs/$HP_CONFIG/$START_TIME | wc -l)
+    LOGOUT=$(wc -l ~/MITM/logs/logouts/"$CONTAINER_NAME".log)
 
-    # Check the current time, see if container needs to be recycled.
-    if [[ "$LOGOUT" -eq 1 || $(($CURRENT_TIME - $LAST_ACTION_EPOCH)) -ge $MAX_IDLE_TIME || "$TIME_ELAPSED" -ge $MAX_DURATION ]]
-    then # IF CONTAINER SHOULD BE RECYCLED...
+    # if container should be recycled
+    if [[ $LOGOUT -eq 1 || $(($CURRENT_TIME - $LAST_ACTION_EPOCH)) -ge $MAX_IDLE_TIME || $TIME_ELAPSED -ge $MAX_DURATION ]]
+    then
+        # if yes, recycle
         # stop MITM forever process
         MITM_FOREVER_INDEX=$(sudo forever list | grep "$CONTAINER_NAME" | awk '{print $2}' | grep -oE "[0-9]+")
-        sudo forever stop “$MITM_FOREVER_INDEX” 
+        sudo forever stop "$MITM_FOREVER_INDEX"
 
-        # remove NAT rules for container (take container offline)
-        sudo iptables --table nat --delete POSTROUTING --source "$CONTAINER_IP" --destination 0.0.0.0/0 --jump SNAT --to-source "$EXTERNAL_IP"
-        sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --jump DNAT --to-destination "$CONTAINER_IP"
         # remove NAT rules for MITM
-        sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination 127.0.0.1:64462 # is this NAT rule right?
+        sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination 127.0.0.1:64462 # is this right?
+        # remove NAT rules for container (take container offline)
+        sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --jump DNAT --to-destination "$CONTAINER_IP"
+        sudo iptables --table nat --delete POSTROUTING --source "$CONTAINER_IP" --destination 0.0.0.0/0 --jump SNAT --to-source "$EXTERNAL_IP"
         # housekeeping echo statement
         echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: nat rules removed for "$CONTAINER_NAME"" >> scripts.log
                 
@@ -89,30 +89,32 @@ else # IF HP CONFIG AND LOGIN TIME ARE IN UTIL FILE...
         # delete associated utility file
         rm ./recycle_util_"$CONTAINER_NAME"
         # manage logs (should be a script call)
-        ./grab_logs "$CONTAINER_NAME"
-
-        # Randomly select a honeypot configuration
+        ./grab_logs $CONTAINER_NAME
+        
         HP_CONFIG=$(shuf -n 1 ./honeypot_configs)
         # create new version of the util file with the honeypot config in it
         touch ./recycle_util_"$CONTAINER_NAME"
         echo config:"$HP_CONFIG" >> ./recycle_util_"$CONTAINER_NAME"
-        # copy randomly selected honeypot config
+        # copy new randomly selected honeypot config
         sudo lxc-copy -n "$HP_CONFIG" -N "$CONTAINER_NAME"
         # start up container 
         sudo lxc-start -n "$CONTAINER_NAME"
+        sudo lxc-attach -n "$CONTAINER_NAME" -- apt install openssh-server -y 
+        sudo systemctl restart lxc-net; # DO WE NEED THIS
         
         # set-up MITM and auto-access
         sudo forever -l ~/attacker_logs/debug_logs/"$HP_CONFIG"/"$START_TIME" -a start ~/MITM/mitm.js -n "$CONTAINER_NAME" -i "$CONTAINER_IP" -p 32887 --auto-access --auto-access-fixed 2 --debug # does auto-access actually work
-
-        # set-up NAT rules for MITM
-        sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination 127.0.0.1:64462 # is this NAT rule right?
+        sudo sysctl -w net.ipv4.conf.all.route_localnet=1 # DO WE NEED THIS
+        
         # set-up container NAT rules (putting container back online again)
         sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --jump DNAT --to-destination "$CONTAINER_IP"
         sudo iptables --table nat --insert POSTROUTING --source "$CONTAINER_IP" --destination 0.0.0.0/0 --jump SNAT --to-source "$EXTERNAL_IP"
+        # set-up NAT rules for MITM
+        sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination 127.0.0.1:32887 # is this right?
         # housekeeping echo statement
         echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: recycled "$CONTAINER_NAME"" >> scripts.log
-    else # IF CONTAINER IS NOT READY TO BE RECYCLED...
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')] STATUS: "$CONTAINER_NAME" not ready to be recycled" >> scripts.log
+    else
+        # if no, exit
         exit 3
     fi
 fi
