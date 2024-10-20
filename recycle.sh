@@ -67,7 +67,7 @@ else # IF HP CONFIG AND LOGIN TIME ARE IN UTIL FILE...
     if [[ "$LOGOUT" -eq 1 || $(($CURRENT_TIME - $LAST_ACTION_EPOCH)) -ge $MAX_IDLE_TIME || "$TIME_ELAPSED" -ge $MAX_DURATION ]]
     then # IF CONTAINER SHOULD BE RECYCLED...
         # stop MITM forever process
-        MITM_FOREVER_INDEX=$(sudo forever list | grep "$CONTAINER_NAME" | awk '{print $1}' | grep -oE "[0-9]+")
+        MITM_FOREVER_INDEX=$(sudo forever list | grep "$CONTAINER_NAME" | awk '{print $2}' | grep -oE "[0-9]+")
         sudo forever stop “$MITM_FOREVER_INDEX” 
 
         # remove NAT rules for container (take container offline)
