@@ -66,11 +66,15 @@ else # IF HP CONFIG AND LOGIN TIME ARE IN UTIL FILE...
     # Check the current time, see if container needs to be recycled.
     if [[ "$LOGOUT" -eq 1 || $(($CURRENT_TIME - $LAST_ACTION_EPOCH)) -ge $MAX_IDLE_TIME || "$TIME_ELAPSED" -ge $MAX_DURATION ]]
     then # IF CONTAINER SHOULD BE RECYCLED...
-        # remove NAT rules for MITM
-        sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination 127.0.0.1:64462 # incorrect destination (port number)???!?!?!
+        # stop MITM forever process
+        MITM_FOREVER_INDEX=$(sudo forever list | grep “$CONTAINER_NAME” | awk '{print $1}')
+        sudo forever stop “$MITM_FOREVER_INDEX” 
+
         # remove NAT rules for container (take container offline)
         sudo iptables --table nat --delete POSTROUTING --source "$CONTAINER_IP" --destination 0.0.0.0/0 --jump SNAT --to-source "$EXTERNAL_IP"
         sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --jump DNAT --to-destination "$CONTAINER_IP"
+        # remove NAT rules for MITM
+        sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination 127.0.0.1:64462 # is this NAT rule right?
         # housekeeping echo statement
         echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: nat rules removed for "$CONTAINER_NAME"" >> scripts.log
                 
@@ -85,26 +89,26 @@ else # IF HP CONFIG AND LOGIN TIME ARE IN UTIL FILE...
         # delete associated utility file
         rm ./recycle_util_"$CONTAINER_NAME"
         # manage logs (should be a script call)
-        ./grab_logs $CONTAINER_NAME
-        
+        ./grab_logs "$CONTAINER_NAME"
+
+        # Randomly select a honeypot configuration
         HP_CONFIG=$(shuf -n 1 ./honeypot_configs)
         # create new version of the util file with the honeypot config in it
         touch ./recycle_util_"$CONTAINER_NAME"
         echo config:"$HP_CONFIG" >> ./recycle_util_"$CONTAINER_NAME"
-        # copy new randomly selected honeypot config
+        # copy randomly selected honeypot config
         sudo lxc-copy -n "$HP_CONFIG" -N "$CONTAINER_NAME"
         # start up container 
         sudo lxc-start -n "$CONTAINER_NAME"
         
         # set-up MITM and auto-access
         sudo forever -l ~/attacker_logs/debug_logs/"$HP_CONFIG"/"$START_TIME" -a start ~/MITM/mitm.js -n "$CONTAINER_NAME" -i "$CONTAINER_IP" -p 32887 --auto-access --auto-access-fixed 2 --debug # does auto-access actually work
-        sudo sysctl -w net.ipv4.conf.all.route_localnet=1
-           
+
+        # set-up NAT rules for MITM
+        sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination 127.0.0.1:64462 # is this NAT rule right?
         # set-up container NAT rules (putting container back online again)
         sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --jump DNAT --to-destination "$CONTAINER_IP"
         sudo iptables --table nat --insert POSTROUTING --source "$CONTAINER_IP" --destination 0.0.0.0/0 --jump SNAT --to-source "$EXTERNAL_IP"
-        # set-up NAT rules for MITM
-        sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination 127.0.0.1:64462 # incorrect destination (port number)???!?!?!
         # housekeeping echo statement
         echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: recycled "$CONTAINER_NAME"" >> scripts.log
     else # IF CONTAINER IS NOT READY TO BE RECYCLED...
