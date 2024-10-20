@@ -38,7 +38,7 @@ then
     then 
         exit 2 # still no attacker
     else
-        LOG_PRE=$(cat ~/MITM/logs/logins/”$CONTAINER_NAME”.log | cut -d';' -f1 | cut -d' ' -f2)
+        LOG_PRE=$(cat ~/MITM/logs/logins/"$CONTAINER_NAME".log | cut -d';' -f1 | cut -d' ' -f2)
         # Login time in epoch for easy math
         LOGIN_EPOCH=$(date -d "$LOG_PRE" +"%s")
         LOGIN_TIME=$(cat ~/MITM/logs/logins/"$CONTAINER_NAME".log | cut -d';' -f3)
@@ -51,8 +51,8 @@ else
     # check the current time, see if container needs to be recycled.
     # Calculating how long attacker has been inside container
     CURRENT_TIME=$(date +%s)
-    LOGIN_EPOCH=$(grep “epoch” ./recycle_util_$CONTAINER_NAME | cut -d ':' -f2)
-    LOGIN_TIME=$(grep “login” ./recycle_util_$CONTAINER_NAME | cut -d ':' -f2)
+    LOGIN_EPOCH=$(grep "epoch" ./recycle_util_$CONTAINER_NAME | cut -d ':' -f2)
+    LOGIN_TIME=$(grep "login" ./recycle_util_$CONTAINER_NAME | cut -d ':' -f2)
     TIME_ELAPSED=$(($CURRENT_TIME - $LOGIN_EPOCH))
     
     # Calculating idle time
@@ -94,13 +94,13 @@ else
         HP_CONFIG=$(shuf -n 1 ./honeypot_configs)
         # create new version of the util file with the honeypot config in it
         touch ./recycle_util_"$CONTAINER_NAME"
-        echo config:"$HP_CONFIG" >> ./recycle_util_"$CONTAINER_NAME"
+        echo "config:"$HP_CONFIG"" >> ./recycle_util_"$CONTAINER_NAME"
         # copy new randomly selected honeypot config
-        sudo lxc-copy -n "$HP_CONFIG" -N "$CONTAINER_NAME"
+        sudo lxc-copy -n "$HP_CONFIG" -N "$CONTAINER_NAME";
         # start up container 
-        sudo lxc-start -n "$CONTAINER_NAME"
-        sudo lxc-attach -n "$CONTAINER_NAME" -- apt install openssh-server -y 
+        sudo lxc-start -n "$CONTAINER_NAME";
         sudo systemctl restart lxc-net; # DO WE NEED THIS
+        sudo lxc-attach -n "$CONTAINER_NAME" -- apt install openssh-server -y 
         
         # set-up MITM and auto-access
         sudo forever -l ~/attacker_logs/debug_logs/"$HP_CONFIG"/"$START_TIME" -a start ~/MITM/mitm.js -n "$CONTAINER_NAME" -i "$CONTAINER_IP" -p 32887 --auto-access --auto-access-fixed 2 --debug # does auto-access actually work
