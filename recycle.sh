@@ -32,10 +32,11 @@ MAX_IDLE_TIME=120 # attacker's maximum idle time (in seconds)
 # else exit (do nothing)
 
 # checking what contents are in util file
-if [[ $(wc -l ./recycle_util_"$CONTAINER_NAME") -eq 1 ]]
+if [[ $(wc -l ./recycle_util_"$CONTAINER_NAME" | cut -d ' ' -f1) -eq 1 ]]
 then
-    if [[ $(wc -l ~/MITM/logs/logins/"$CONTAINER_NAME".log) -lt 1 ]]
-    then 
+    if [[ $(wc -l ~/MITM/logs/logins/"$CONTAINER_NAME".log | cut -d ' ' -f1) -lt 1 ]]
+    then
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')] STATUS: $CONTAINER_NAME is waiting for an attacker." >> scripts.log
         exit 2 # still no attacker
     else
         LOG_PRE=$(cat ~/MITM/logs/logins/"$CONTAINER_NAME".log | cut -d';' -f1 | cut -d' ' -f2)
@@ -53,25 +54,30 @@ else
     CURRENT_TIME=$(date +%s)
     LOGIN_EPOCH=$(grep "epoch" ./recycle_util_$CONTAINER_NAME | cut -d ':' -f2)
     LOGIN_TIME=$(grep "login" ./recycle_util_$CONTAINER_NAME | cut -d ':' -f2)
-    TIME_ELAPSED=$(($CURRENT_TIME - $LOGIN_EPOCH))
+    TIME_ELAPSED=$((CURRENT_TIME - LOGIN_EPOCH))
     
     # Calculating idle time
     ID_PRE=$(tail -n 1 ~/MITM/logs/keystrokes/"$LOGIN_TIME".log | cut -d ' ' -f2)
     LAST_ACTION_EPOCH=$(date -d "$ID_PRE" +"%s")
+    CURRENT_IDLE_TIME=$((CURRENT_TIME - LAST_ACTION_EPOCH))
     
     # Check for logout
-    LOGOUT=$(wc -l ~/MITM/logs/logouts/"$CONTAINER_NAME".log)
+    LOGOUT=$(wc -l ~/MITM/logs/logouts/"$CONTAINER_NAME".log | cut -d ' ' -f1)
 
-    # if container should be recycled
-    if [[ $LOGOUT -eq 1 || $(($CURRENT_TIME - $LAST_ACTION_EPOCH)) -ge $MAX_IDLE_TIME || $TIME_ELAPSED -ge $MAX_DURATION ]]
+    # Check if container should be recycled
+    # recycle container if 1 of 3 conditions are met:
+    # 1. Attacker logged out
+    # 2. Attacker's idle time >= 2 minutes
+    # 3. Attacker has spent >= 10 minutes inside container
+    if [[ $LOGOUT -eq 1 || $CURRENT_IDLE_TIME -ge $MAX_IDLE_TIME || $TIME_ELAPSED -ge $MAX_DURATION ]]
     then
-        # if yes, recycle
+        # met 1 of 3 conditions? recycle.
         # stop MITM forever process
-        MITM_FOREVER_INDEX=$(sudo forever list | grep "$CONTAINER_NAME" | awk '{print $2}' | grep -oE "[0-9]+")
-        sudo forever stop "$MITM_FOREVER_INDEX"
+        MITM_FOREVER_INDEX=$(sudo forever list | grep "$CONTAINER_NAME" | awk '{print $2}' | grep -oE "[0-9]+");
+        sudo forever stop "$MITM_FOREVER_INDEX";
 
         # remove NAT rules for MITM
-        sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination 127.0.0.1:64462 # is this right?
+        sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination 127.0.0.1:32887 # is this right?
         # remove NAT rules for container (take container offline)
         sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --jump DNAT --to-destination "$CONTAINER_IP"
         sudo iptables --table nat --delete POSTROUTING --source "$CONTAINER_IP" --destination 0.0.0.0/0 --jump SNAT --to-source "$EXTERNAL_IP"
@@ -79,31 +85,31 @@ else
         echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: nat rules removed for "$CONTAINER_NAME"" >> scripts.log
                 
         # Stop old container
-        sudo lxc-stop -n "$CONTAINER_NAME"
+        sudo lxc-stop -n "$CONTAINER_NAME";
         # echo statement is for housekeeping
         echo "[$(date +'%Y-%m-%d %H:%M:%S')] STATUS: "$CONTAINER_NAME" STOPPED at $(date +%Y-%m-%dT%H:%M:%S%Z)" >> scripts.log
         # Delete old container
-        sudo lxc-remove -n "$CONTAINER_NAME"
+        sudo lxc-remove -n "$CONTAINER_NAME";
         # echo statement is for housekeeping
         echo "[$(date +'%Y-%m-%d %H:%M:%S')] STATUS: "$CONTAINER_NAME" REMOVED at $(date +%Y-%m-%dT%H:%M:%S%Z)" >> scripts.log  
         # delete associated utility file
         rm ./recycle_util_"$CONTAINER_NAME"
         # manage logs (should be a script call)
-        ./grab_logs $CONTAINER_NAME
+        ./grab_logs $CONTAINER_NAME;
         
-        HP_CONFIG=$(shuf -n 1 ./honeypot_configs)
+        HP_CONFIG=$(shuf -n 1 ./setup/honeypot_configs)
         # create new version of the util file with the honeypot config in it
-        touch ./recycle_util_"$CONTAINER_NAME"
         echo "config:"$HP_CONFIG"" >> ./recycle_util_"$CONTAINER_NAME"
         # copy new randomly selected honeypot config
         sudo lxc-copy -n "$HP_CONFIG" -N "$CONTAINER_NAME";
         # start up container 
         sudo lxc-start -n "$CONTAINER_NAME";
         sudo systemctl restart lxc-net; # DO WE NEED THIS
-        sudo lxc-attach -n "$CONTAINER_NAME" -- apt install openssh-server -y 
+        sudo lxc-attach -n "$CONTAINER_NAME" -- apt install openssh-server -y;
         
         # set-up MITM and auto-access
-        sudo forever -l ~/attacker_logs/debug_logs/"$HP_CONFIG"/"$(date -Iseconds)" -a start ~/MITM/mitm.js -n "$CONTAINER_NAME" -i "$CONTAINER_IP" -p 32887 --auto-access --auto-access-fixed 2 --debug # does auto-access actually work
+        # does auto-access actually work
+        sudo forever -l ~/attacker_logs/debug_logs/"$HP_CONFIG"/"$(date -Iseconds)" -a start ~/MITM/mitm.js -n "$CONTAINER_NAME" -i "$CONTAINER_IP" -p 32887 --auto-access --auto-access-fixed 2 --debug; 
         sudo sysctl -w net.ipv4.conf.all.route_localnet=1 # DO WE NEED THIS
         
         # set-up container NAT rules (putting container back online again)
@@ -114,6 +120,7 @@ else
         # housekeeping echo statement
         echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: recycled "$CONTAINER_NAME"" >> scripts.log
     else
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')] $CONTAINER_NAME not ready to be recycled" >> scripts.log
         # if no, exit
         exit 3
     fi
