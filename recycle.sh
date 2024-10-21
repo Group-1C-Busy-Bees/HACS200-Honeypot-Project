@@ -103,7 +103,7 @@ else
         sudo lxc-attach -n "$CONTAINER_NAME" -- apt install openssh-server -y 
         
         # set-up MITM and auto-access
-        sudo forever -l ~/attacker_logs/debug_logs/"$HP_CONFIG"/"$START_TIME" -a start ~/MITM/mitm.js -n "$CONTAINER_NAME" -i "$CONTAINER_IP" -p 32887 --auto-access --auto-access-fixed 2 --debug # does auto-access actually work
+        sudo forever -l ~/attacker_logs/debug_logs/"$HP_CONFIG"/"$(date -Iseconds)" -a start ~/MITM/mitm.js -n "$CONTAINER_NAME" -i "$CONTAINER_IP" -p 32887 --auto-access --auto-access-fixed 2 --debug # does auto-access actually work
         sudo sysctl -w net.ipv4.conf.all.route_localnet=1 # DO WE NEED THIS
         
         # set-up container NAT rules (putting container back online again)
