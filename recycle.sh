@@ -33,14 +33,33 @@ MAX_IDLE_TIME=120 # attacker's maximum idle time (in seconds)
 # else exit (do nothing)
 
 # checking what contents are in util file
-if [[ $(wc -l /home/student/recycle_util_"$CONTAINER_NAME" | cut -d ' ' -f1) -eq 1 ]]
+if [[ $(wc -l /home/student/recycle_util_"$CONTAINER_NAME" 2>/dev/null | cut -d ' ' -f1) -eq 1 ]]
 then
-    if [[ $(wc -l /home/student/MITM/logs/logins/"$CONTAINER_NAME".log | cut -d ' ' -f1) -lt 1 ]]
+    # grabbing the file path for the forever log
+    FOREVER_LOG=$(sudo forever list --plain 2>/dev/null | grep "\-n $CONTAINER_NAME" | awk '{print $20}')
+
+    # EMERGENCY KICK CASE ONLY
+    # CASE: THERE'S NOTHING IN THE LOGINS FILE BUT SOMEONE'S FAILED TO GET IN
+    # MEANS MITM HAS DONE AN OOPSIE
+    if [[ $(wc -l /home/student/MITM/logs/logins/"$CONTAINER_NAME".log 2>/dev/null | cut -d ' ' -f1) -lt 1 ]]
     then
-        # echo "[$(date +'%Y-%m-%d %H:%M:%S')] STATUS: $CONTAINER_NAME is waiting for an attacker." >> scripts.log
+      # emergency kick start case
+      if [[ $(cat $FOREVER_LOG | grep "Authentication Failed" | wc -l) -gt 0 ]]
+      then
+          /home/student/emergency_kickstart $CONTAINER_NAME $EXTERNAL_IP $MITM_PORT
+          echo "[$(date +'%Y-%m-%d %H:%M:%S')] STATUS: "$CONTAINER_NAME" EMERGENCY RECYCLED at $(date +%Y-%m-%dT%H:%M:%S%Z)" >> /home/student/scripts.log
+          exit 73
+      fi
+    fi
+
+    # the case that NO attacker has logged into the container
+    if [[ $(cat $FOREVER_LOG | grep 'Adding the following credentials:' | wc -l | cut -d' ' -f1) -lt 1 ]]
+    then
+         #echo "[$(date +'%Y-%m-%d %H:%M:%S')] STATUS: $CONTAINER_NAME is waiting for an attacker." >> scripts.log
         exit 2 # still no attacker
     else
-        LOG_PRE=$(cat /home/student/MITM/logs/logins/"$CONTAINER_NAME".log | head -n 1 | cut -d';' -f1)
+    # the case that an attacker HAS logged into the container
+        LOG_PRE=$(cat $FOREVER_LOG | grep 'Adding the following credentials:' | cut -d' ' -f2)
         # Login time in epoch for easy math
         LOGIN_EPOCH=$(date -d "$LOG_PRE" +"%s")
         LOGIN_TIME=$(cat /home/student/MITM/logs/logins/"$CONTAINER_NAME".log | head -n 1 | cut -d';' -f3)
@@ -51,7 +70,8 @@ then
         ATTACKER_IP=$(head -n 1 /home/student/MITM/logs/logins/"$CONTAINER_NAME".log | cut -d';' -f2)
         sudo iptables --insert INPUT -d 10.0.3.1 -p tcp --dport "$MITM_PORT" --jump DROP
         sudo iptables --insert INPUT -s "$ATTACKER_IP" -d 10.0.3.1 -p tcp --dport "$MITM_PORT" --jump ACCEPT
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')] STATUS: attacker connected to $CONTAINER_NAME" >> scripts.log
+        echo "attacker:$ATTACKER_IP" >> /home/student/recycle_util_"$CONTAINER_NAME"
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')] STATUS: attacker connected to $CONTAINER_NAME" >> /home/student/scripts.log
         exit 2
     fi
 else
@@ -63,7 +83,7 @@ else
     TIME_ELAPSED=$((CURRENT_TIME - LOGIN_EPOCH))
 
     # Calculating idle time
-    if [[ $(wc -l /home/student/MITM/logs/keystrokes/"$LOGIN_TIME".log | cut -d' ' -f1) -ne 0 ]]
+    if [[ $(wc -l /home/student/MITM/logs/keystrokes/"$LOGIN_TIME".log 2>/dev/null | cut -d' ' -f1) -ne 0 ]]
     then
       ID_PRE=$(tail -n 1 /home/student/MITM/logs/keystrokes/"$LOGIN_TIME".log | cut -d ' ' -f2)
       LAST_ACTION_EPOCH=$(date -d "$ID_PRE" +"%s")
@@ -80,39 +100,40 @@ else
     # 1. Attacker logged out
     # 2. Attacker's idle time >= 2 minutes
     # 3. Attacker has spent >= 10 minutes inside container
-    if [[ $LOGOUT -eq 1 ]] || [[ $CURRENT_IDLE_TIME -ge $MAX_IDLE_TIME ]] || [[ $TIME_ELAPSED -ge $MAX_DURATION ]]
+    if [[ $LOGOUT -ge 1 ]] || [[ $CURRENT_IDLE_TIME -ge $MAX_IDLE_TIME ]] || [[ $TIME_ELAPSED -ge $MAX_DURATION ]]
     then
         # met 1 of 3 conditions? recycle.
         # stop MITM forever process
-        MITM_FOREVER_INDEX=$(sudo forever list | grep "$CONTAINER_NAME" | awk '{print $2}' | grep -oE "[0-9]+");
-        sudo forever stop "$MITM_FOREVER_INDEX";
+        MITM_FOREVER_UID=$(sudo forever list 2>/dev/null | grep "$CONTAINER_NAME" | awk '{print $3}');
+        sudo forever stop "$MITM_FOREVER_UID";
 
         CONTAINER_IP=$(sudo lxc-info -n "$CONTAINER_NAME" -iH) # GETS CONTAINER IP
-        
         # remove NAT rules for MITM
         sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination 10.0.3.1:"$MITM_PORT" # is this right?
         # remove NAT rules for container (take container offline)
         sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --jump DNAT --to-destination "$CONTAINER_IP"
         sudo iptables --table nat --delete POSTROUTING --source "$CONTAINER_IP" --destination 0.0.0.0/0 --jump SNAT --to-source "$EXTERNAL_IP"
+        ATTACKER_IP=$(grep "attacker" /home/student/recycle_util_$CONTAINER_NAME | head -n 1| cut -d ':' -f2)
         sudo iptables --delete INPUT -d 10.0.3.1 -p tcp --dport "$MITM_PORT" --jump DROP
         sudo iptables --delete INPUT -s "$ATTACKER_IP" -d 10.0.3.1 -p tcp --dport "$MITM_PORT" --jump ACCEPT
         # housekeeping echo statement
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: nat rules removed for "$CONTAINER_NAME"" >> scripts.log
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: nat rules removed for "$CONTAINER_NAME"" >> /home/student/scripts.log
 
         # Stop old container
         sudo lxc-stop -n "$CONTAINER_NAME";
         # echo statement is for housekeeping
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')] STATUS: "$CONTAINER_NAME" STOPPED at $(date +%Y-%m-%dT%H:%M:%S%Z)" >> scripts.log
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')] STATUS: "$CONTAINER_NAME" STOPPED at $(date +%Y-%m-%dT%H:%M:%S%Z)" >> /home/student/scripts.log
         # Delete old container
         sudo lxc-destroy -n "$CONTAINER_NAME";
         # echo statement is for housekeeping
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')] STATUS: "$CONTAINER_NAME" REMOVED at $(date +%Y-%m-%dT%H:%M:%S%Z)" >> scripts.log
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')] STATUS: "$CONTAINER_NAME" REMOVED at $(date +%Y-%m-%dT%H:%M:%S%Z)" >> /home/student/scripts.log
         # delete associated utility file
         # manage logs (should be a script call)
         sudo /home/student/grab_logs $CONTAINER_NAME;
 
         HP_CONFIG=$(shuf -n 1 /home/student/setup/honeypot_configs)
         # create new version of the util file with the honeypot config in it
+        # echo "IGNORE THIS GRACE IS TESTING MEOWMEOW"
         echo "config:"$HP_CONFIG"" > /home/student/recycle_util_"$CONTAINER_NAME"
         sudo chmod 777 /home/student/recycle_util_"$CONTAINER_NAME"
         # copy new randomly selected honeypot config and start container
@@ -140,11 +161,11 @@ else
         # set-up NAT rules for MITM
         sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination "$EXTERNAL_IP" --protocol tcp --dport 22 --jump DNAT --to-destination 10.0.3.1:"$MITM_PORT" # is this right?
         # housekeeping echo statement
-        echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: recycled "$CONTAINER_NAME"" >> scripts.log
+        echo "[$(date +'%Y-%m-%d %H:%M:%S')] SUCCESS: recycled "$CONTAINER_NAME"" >> /home/student/scripts.log
         exit 3
     else
         # echo "[$(date +'%Y-%m-%d %H:%M:%S')] $CONTAINER_NAME not ready to be recycled" >> scripts.log
         # if no, exit
-        exit 3
+        exit 27
     fi
 fi
